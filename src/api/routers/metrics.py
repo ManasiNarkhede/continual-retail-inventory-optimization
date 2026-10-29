@@ -1,10 +1,10 @@
 """Metrics endpoints for dashboard and CL monitoring.
 
 All KPI values are derived from **live sources** — MLflow experiment
-tracking, CL artifact files, and actual RL simulation rollouts.
-Hardcoded placeholder values have been removed.  When no real data is
-available the endpoint returns ``is_demo: true`` with explicit zero
-values so the frontend can show a clear unavailable state.
+tracking, training artifacts, CL artifact files, and actual RL simulation
+rollouts. Inventory KPIs are never substituted: without a loaded RL agent
+they are ``null`` (``rl_agent_loaded: false``) and the simulation endpoints
+return HTTP 503.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 
 from src.api.limiter import limiter
 from src.api.model_registry import (
+    SimulationUnavailableError,
     fetch_live_kpi_payload,
     get_latest_simulation,
     run_rl_simulation_metrics,
@@ -35,6 +36,8 @@ from src.utils.json_logger import log_json
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+_NO_AGENT_DETAIL = "Simulation unavailable: no RL agent loaded."
 
 
 def _service_level_to_percent(value: float) -> float:
@@ -94,137 +97,91 @@ def get_cl_metrics() -> CLMetricsResponse:
 # -----------------------------------------------------------------------
 
 
+def _rl_kpi_fields(request_id: str) -> dict[str, float | bool | None]:
+    """Inventory KPIs from the loaded RL agent.
+
+    Uses the cached simulation when present, otherwise runs one. Without an RL
+    agent the values are ``None`` and ``rl_agent_loaded`` is ``False``.
+    """
+    sim = get_latest_simulation()
+    if not (sim and float(sim.get("service_level", 0.0)) > 0):
+        sim = run_rl_simulation_metrics(n_days=90, request_id=request_id)
+    if not sim:
+        return {
+            "service_level": None,
+            "fill_rate": None,
+            "total_cost": None,
+            "rl_agent_loaded": False,
+        }
+    return {
+        "service_level": _service_level_to_percent(float(sim.get("service_level", 0.0))),
+        "fill_rate": _service_level_to_percent(float(sim.get("fill_rate", 0.0))),
+        "total_cost": float(sim.get("total_cost", 0.0)),
+        "rl_agent_loaded": True,
+    }
+
+
 @router.get("/kpis", response_model=KpiResponse)
 def get_kpis() -> KpiResponse:
     """Return top-line KPI values for dashboard cards.
 
-    Data sources (in priority order):
-    1. ``data/processed/metrics_latest.json`` — written by the training
-       pipeline with forecast SMAPE, RMSE, and coverage.
-    2. MLflow experiment query — fallback for forecast metrics.
-    3. Live RL simulation — provides actual service-level and fill-rate.
-    4. CL artifact — provides real BWT.
-
-    When none of these are available, returns ``is_demo: true`` with zero
-    values so the frontend can display a clear "no data" state.
+    Forecast metrics come from the MLflow experiment when reachable, otherwise
+    from ``data/processed/metrics_latest.json`` (written by the training pipeline).
+    Inventory metrics (service level, fill rate, cost) come only from an RL
+    simulation; without a loaded RL agent they are ``null`` and
+    ``rl_agent_loaded`` is ``false``. BWT comes from the CL artifact.
 
     Returns:
         KPI response payload.
+
+    Raises:
+        HTTPException: 503 if no forecast metrics are available yet.
     """
     timestamp_utc = datetime.now(timezone.utc).isoformat()
     request_id = str(uuid4())
-    response: KpiResponse | None = None
     live_payload = fetch_live_kpi_payload()
 
     if live_payload is not None:
-        smape_value = read_metric(live_payload, MetricNames.SMAPE, default=0.0)
-        baseline_smape = read_metric(live_payload, MetricNames.BASELINE_SMAPE, default=smape_value)
-        model_rmse = read_metric(live_payload, MetricNames.RMSE, default=0.0)
-        coverage = read_metric(live_payload, MetricNames.COVERAGE_80, default=0.0)
-        model_version = str(live_payload.get("model_version", "mlflow_latest"))
-        service_level = read_metric(live_payload, MetricNames.SERVICE_LEVEL, default=0.0)
-        fill_rate = read_metric(live_payload, MetricNames.FILL_RATE, default=0.0)
-        total_cost_live = read_metric(live_payload, MetricNames.TOTAL_COST, default=0.0)
-        if fill_rate <= 0.0 or total_cost_live <= 0.0:
-            sim_live = run_rl_simulation_metrics(n_days=90, request_id=request_id)
-            fill_rate = float(sim_live.get("fill_rate", fill_rate))
-            total_cost_live = float(sim_live.get("total_cost", total_cost_live))
-        cl_payload = load_cl_metrics_artifact()
-        bwt_value = float(cl_payload.get("bwt", 0.0)) if cl_payload else 0.0
+        payload = live_payload
+        model_version = str(payload.get("model_version", "mlflow_latest"))
+        source = "kpi_response_live"
+    else:
+        metrics_path = Path("data/processed/metrics_latest.json")
+        if not metrics_path.exists():
+            raise HTTPException(
+                status_code=503, detail="Model Training in Progress: KPI metrics are not ready yet."
+            )
+        payload = json.loads(metrics_path.read_text(encoding="utf-8"))
+        model_version = str(payload.get("model_version", "artifact_latest"))
+        source = "kpi_response_artifact"
 
-        uplift = baseline_smape - smape_value
-
-        response = KpiResponse(
-            smape=smape_value,
-            baseline_smape=baseline_smape,
-            smape_uplift_vs_baseline=uplift,
-            rmse=model_rmse,
-            coverage_80pct=coverage,
-            service_level=_service_level_to_percent(service_level),
-            fill_rate=_service_level_to_percent(fill_rate),
-            total_cost=total_cost_live,
-            cost_saved=0.0,
-            bwt=bwt_value,
-            model_version=model_version,
-            timestamp_utc=timestamp_utc,
-            is_demo=False,
-        )
-        response_model_version = model_version
-        log_json(
-            logger,
-            logging.INFO,
-            "kpi_response_live",
-            store_id=None,
-            model_version=response_model_version,
-            request_id=request_id,
-            smape=response.smape,
-            service_level=response.service_level,
-        )
-        return response
-
-    # Fallback path for environments without MLflow server
-    metrics_path = Path("data/processed/metrics_latest.json")
-    if not metrics_path.exists():
-        raise HTTPException(
-            status_code=503, detail="Model Training in Progress: KPI metrics are not ready yet."
-        )
-
-    payload = json.loads(metrics_path.read_text(encoding="utf-8"))
     smape_value = read_metric(payload, MetricNames.SMAPE, default=0.0)
     baseline_smape = read_metric(payload, MetricNames.BASELINE_SMAPE, default=smape_value)
-    model_rmse = read_metric(payload, MetricNames.RMSE, default=0.0)
-    coverage = read_metric(payload, MetricNames.COVERAGE_80, default=0.0)
-    model_version = str(payload.get("model_version", "artifact_latest"))
-
-    # Read RL metrics from JSON if available
-    service_level = float(payload.get("service_level", 0.0))
-    fill_rate = float(payload.get("fill_rate", 0.0))
-    total_cost = float(payload.get("total_cost", 0.0))
-
-    # --- Source 3: RL simulation (only as fallback when JSON has no RL metrics) ---
-    if service_level <= 0.0 or fill_rate <= 0.0:
-        sim = get_latest_simulation()
-        if sim and sim.get("service_level", 0.0) > 0:
-            service_level = sim.get("service_level", service_level)
-            fill_rate = sim.get("fill_rate", fill_rate)
-            total_cost = sim.get("total_cost", total_cost)
-        else:
-            sim_live = run_rl_simulation_metrics(n_days=90, request_id=request_id)
-            if sim_live:
-                service_level = float(sim_live.get("service_level", service_level))
-                fill_rate = float(sim_live.get("fill_rate", fill_rate))
-                total_cost = float(sim_live.get("total_cost", total_cost))
-
-    # --- Source 4: CL metrics (graceful fallback to 0.0 when unavailable) ---
     cl_payload = load_cl_metrics_artifact()
-    bwt_value = float(cl_payload.get("bwt", 0.0)) if cl_payload else 0.0
-
-    uplift = baseline_smape - smape_value
 
     response = KpiResponse(
         smape=smape_value,
         baseline_smape=baseline_smape,
-        smape_uplift_vs_baseline=uplift,
-        rmse=model_rmse,
-        coverage_80pct=coverage,
-        service_level=_service_level_to_percent(service_level),
-        fill_rate=_service_level_to_percent(fill_rate),
-        total_cost=float(total_cost),
+        smape_uplift_vs_baseline=baseline_smape - smape_value,
+        rmse=read_metric(payload, MetricNames.RMSE, default=0.0),
+        coverage_80pct=read_metric(payload, MetricNames.COVERAGE_80, default=0.0),
         cost_saved=0.0,
-        bwt=bwt_value,
+        bwt=float(cl_payload.get("bwt", 0.0)) if cl_payload else 0.0,
         model_version=model_version,
         timestamp_utc=timestamp_utc,
         is_demo=False,
+        **_rl_kpi_fields(request_id),
     )
     log_json(
         logger,
         logging.INFO,
-        "kpi_response_artifact",
+        source,
         store_id=None,
         model_version=model_version,
         request_id=request_id,
         smape=response.smape,
         service_level=response.service_level,
+        rl_agent_loaded=response.rl_agent_loaded,
     )
     return response
 
@@ -258,13 +215,16 @@ async def run_simulation_batch(
     if not parsed_ids:
         raise HTTPException(status_code=400, detail="store_ids cannot be empty")
 
-    result = await run_rl_simulation_metrics_async(
-        store_ids=parsed_ids,
-        n_days=n_days,
-        risk_aversion=risk_aversion,
-        n_mc=16,
-        request_id=request_id,
-    )
+    try:
+        result = await run_rl_simulation_metrics_async(
+            store_ids=parsed_ids,
+            n_days=n_days,
+            risk_aversion=risk_aversion,
+            n_mc=16,
+            request_id=request_id,
+        )
+    except SimulationUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=_NO_AGENT_DETAIL) from exc
     response.headers["x-request-id"] = request_id
     log_json(
         logger,
@@ -297,7 +257,7 @@ def run_simulation_single(
         request_id=request_id,
     )
     if not result:
-        raise HTTPException(status_code=503, detail="Simulation unavailable")
+        raise HTTPException(status_code=503, detail=_NO_AGENT_DETAIL)
     payload = {
         "store_id": float(store_id),
         "service_level": float(result.get("service_level", 0.0)),

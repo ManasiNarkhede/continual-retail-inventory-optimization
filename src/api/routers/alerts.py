@@ -36,14 +36,21 @@ def _check_stockout_risk(
     projected = float(sum(forecast[:lead_time]))
     if projected <= current_stock * 0.9:
         return None
-    deficit = projected - current_stock
+    deficit = max(0.0, projected - current_stock)
     severity: Severity = "HIGH" if deficit > current_stock * 0.5 else "MEDIUM"
+    if deficit > 0:
+        message = f"Store {store_id}: projected deficit {deficit:.0f} units in {lead_time} days."
+    else:
+        message = (
+            f"Store {store_id}: projected demand {projected:.0f} units in {lead_time} days "
+            f"uses over 90% of current stock ({current_stock:.0f} units)."
+        )
     return Alert(
         alert_id=f"STOCKOUT-{store_id}-{datetime.utcnow().strftime('%Y%m%d%H%M')}",
         alert_type="STOCKOUT_RISK",
         store_id=int(store_id),
         severity=severity,
-        message=f"Store {store_id}: projected deficit {deficit:.0f} units in {lead_time} days.",
+        message=message,
         created_at=datetime.utcnow().isoformat(),
     )
 

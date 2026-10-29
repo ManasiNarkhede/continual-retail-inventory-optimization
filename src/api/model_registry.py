@@ -25,7 +25,7 @@ import socket
 import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from threading import Lock
+from threading import Lock, RLock
 from typing import Any
 from urllib.parse import urlparse
 
@@ -59,8 +59,15 @@ class RegistryState:
     forecast_cache: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
+class SimulationUnavailableError(RuntimeError):
+    """Raised when an RL simulation is requested but no RL agent is loaded."""
+
+
 _STATE = RegistryState()
 _LOCK = Lock()
+# Held for the whole lazy load so concurrent first requests load each model only once.
+_TFT_LOAD_LOCK = RLock()
+_RL_LOAD_LOCK = RLock()
 _CACHE_LOADED_AT: dict[str, float | None] = {
     "tft": None,
     "rl": None,
@@ -548,22 +555,13 @@ def run_rl_simulation_metrics(
     if agent is None:
         log_json(
             logger,
-            logging.INFO,
-            "simulation_agent_missing_using_fallback",
+            logging.WARNING,
+            "simulation_agent_missing",
             store_id=store_id,
-            model_version="statistical_fallback",
+            model_version="unknown",
             request_id=request_id,
         )
-        # Return good default RL metrics based on statistical inventory policy
-        # These represent a well-run inventory system without needing a trained RL agent
-        return {
-            "service_level": 0.967,
-            "fill_rate": 0.943,
-            "total_cost": 18450.0,
-            "mc_runs": 1.0,
-            "risk_aversion": float(normalized_risk) if normalized_risk is not None else 0.5,
-            "model_version": "statistical_fallback",
-        }
+        return {}
 
     env = _extract_env(agent)
     if env is None:
@@ -740,7 +738,11 @@ async def run_rl_simulation_metrics_async(
     n_mc: int = 16,
     request_id: str | None = None,
 ) -> list[dict[str, float]]:
-    """Run simulations concurrently for multiple stores without blocking."""
+    """Run simulations concurrently for multiple stores without blocking.
+
+    Raises:
+        SimulationUnavailableError: If no RL agent (or its environment) is loaded.
+    """
 
     async def _one(store_id: int) -> dict[str, float]:
         result = await asyncio.to_thread(
@@ -752,6 +754,8 @@ async def run_rl_simulation_metrics_async(
             int(n_mc),
             request_id,
         )
+        if not result:
+            raise SimulationUnavailableError("no RL agent loaded")
         return {
             "store_id": float(store_id),
             "service_level": float(result.get("service_level", 0.0)),
@@ -945,10 +949,14 @@ def get_tft_model() -> tuple[Any | None, Any | None, Any | None]:
     if _STATE.tft_model is not None:
         return _STATE.tft_model, _STATE.tft_dataset, _STATE.tft_reference_df
 
-    with _LOCK:
+    with _TFT_LOAD_LOCK:
         if _STATE.tft_model is not None:
             return _STATE.tft_model, _STATE.tft_dataset, _STATE.tft_reference_df
+        return _load_tft_model(cfg)
 
+
+def _load_tft_model(cfg: dict[str, Any]) -> tuple[Any | None, Any | None, Any | None]:
+    """Load TFT artifacts, recovering them if missing. Caller holds ``_TFT_LOAD_LOCK``."""
     try:
         for attempt in range(2):
             checkpoint_path = str(cfg.get("tft_checkpoint"))
@@ -976,7 +984,7 @@ def get_tft_model() -> tuple[Any | None, Any | None, Any | None]:
         ref_path = Path(str(cfg.get("processed_data", "data/processed/tft_reference.parquet")))
         if _STATE.tft_reference_df is None and ref_path.exists():
             try:
-                _STATE.tft_reference_df = pd.read_parquet(ref_path)
+                _atomic_swap(tft_reference_df=pd.read_parquet(ref_path))
             except Exception:
                 pass
         return None, None, _STATE.tft_reference_df
@@ -1044,10 +1052,14 @@ def get_rl_agent() -> Any | None:
     if _STATE.rl_agent is not None:
         return _STATE.rl_agent
 
-    with _LOCK:
+    with _RL_LOAD_LOCK:
         if _STATE.rl_agent is not None:
             return _STATE.rl_agent
+        return _load_rl_agent(cfg)
 
+
+def _load_rl_agent(cfg: dict[str, Any]) -> Any | None:
+    """Load the RL agent from checkpoint or build a fresh one. Caller holds ``_RL_LOAD_LOCK``."""
     ckpt = Path(str(cfg.get("rl_checkpoint")))
     if not ckpt.exists():
         latest_rl = _latest_file("checkpoints/rl/*.zip")
@@ -1312,6 +1324,8 @@ def invalidate_cache(key: str | None = None) -> None:
             forecast_cache={},
         )
         _CACHE_LOADED_AT.update({"tft": None, "rl": None, "cl_metrics": None, "simulation": None})
+        _SIM_ENV_POOL.clear()
+        _SIM_ENV_POOL_SIGNATURE = None
         return
 
     if key == "tft":

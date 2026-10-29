@@ -8,8 +8,5 @@
   "baseline_smape": 20.4814,
   "baseline_rmse": 1303.8615,
   "training_batches": 13,
-  "status": "production_ready",
-  "service_level": 0.967,
-  "fill_rate": 0.943,
-  "total_cost": 18450.0
+  "status": "production_ready"
 }

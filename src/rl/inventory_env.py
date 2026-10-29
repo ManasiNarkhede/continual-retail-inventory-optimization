@@ -149,7 +149,7 @@ class RetailInventoryEnv(gym.Env):
                     service_weight=float(self.risk_aversion),
                     service_level_target=self.service_level_target,
                 )
-            elif reward_class is ShapedReward:
+            elif issubclass(reward_class, BaseReward):
                 self._default_reward = reward_class(
                     holding_cost=self.holding_cost,
                     stockout_cost=self.stockout_cost,
@@ -204,9 +204,7 @@ class RetailInventoryEnv(gym.Env):
         self.t = 0
         self.stock = float(self.cfg["initial_stock"])
         self.current_lead_time = self._sample_lead_time()
-        self.order_queue: deque[float] = deque(
-            [0.0] * self.current_lead_time, maxlen=self.current_lead_time
-        )
+        self.order_queue: deque[float] = deque([0.0] * self.current_lead_time)
         self.total_holding = 0.0
         self.total_stockout = 0.0
         self.total_orders = 0.0
@@ -252,15 +250,7 @@ class RetailInventoryEnv(gym.Env):
         order_qty = (clipped_action + 1.0) / 2.0 * self.max_order
         order_placed = order_qty > 0.5
 
-        sampled_lead = self._sample_lead_time()
-        if sampled_lead != self.current_lead_time:
-            old_queue = list(self.order_queue)
-            if sampled_lead > self.current_lead_time:
-                old_queue.extend([0.0] * (sampled_lead - self.current_lead_time))
-            else:
-                old_queue = old_queue[:sampled_lead]
-            self.current_lead_time = sampled_lead
-            self.order_queue = deque(old_queue, maxlen=sampled_lead)
+        self.current_lead_time = self._sample_lead_time()
 
         if self.reward_fn is not None and hasattr(self.reward_fn, "shaped"):
             reward = float(
@@ -312,11 +302,18 @@ class RetailInventoryEnv(gym.Env):
         self.total_stockout += self.stockout_cost * shortfall
         self.total_orders += self.order_cost * float(order_placed)
         self.total_demand += demand
-        self.total_fulfilled += min(demand, stock_before + arriving_order)
+        self.total_fulfilled += min(demand, stock_before)
         if shortfall > 0:
             self.stockout_days += 1
 
-        self.order_queue.append(order_qty)
+        # order_queue[i] arrives in i + 1 steps. In-transit orders keep their arrival
+        # step; a changed lead time only affects this new order.
+        slot = self.current_lead_time - 1
+        if slot < len(self.order_queue):
+            self.order_queue[slot] += order_qty
+        else:
+            self.order_queue.extend([0.0] * (slot - len(self.order_queue)))
+            self.order_queue.append(order_qty)
         self.t += 1
 
         terminated = self.t >= self.episode_length

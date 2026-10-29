@@ -256,15 +256,15 @@ npm run test:e2e       # Playwright
 
 These are the values stored in the repository's metrics files. This README has not re-run them.
 
-**Forecasting and inventory** (`data/processed/metrics_latest.json`, 1,115 stores):
+**Forecasting** (`data/processed/metrics_latest.json`, 1,115 stores):
 
 | Metric | TFT | Baseline |
 |--------|-----|----------|
 | Validation sMAPE | 7.78 % | 20.48 % |
 | Validation RMSE | 862.26 | 1303.86 |
 | p10–p90 interval coverage | 80.4 % | – |
-| Service level | 96.7 % | – |
-| Fill rate | 94.3 % | – |
+
+Inventory metrics (service level, fill rate, cost) are computed live by the API from RL simulations (`/api/v1/metrics/kpis`). Without a loaded RL agent they are `null` with `rl_agent_loaded: false`, and the `/metrics/simulate/*` endpoints return 503.
 
 **Continual learning** (`data/processed/cl_metrics_latest.json`, Replay strategy; the file's `source` field is `offline_tuned_profile`):
 

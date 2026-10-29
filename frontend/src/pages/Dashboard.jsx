@@ -13,11 +13,7 @@ export default function Dashboard() {
   const setSelectedStore = useAppStore((state) => state.setSelectedStore)
   const { data: kpis, isLoading } = useKpis()
 
-  const hasRlAgent =
-    typeof kpis?.service_level === 'number' &&
-    kpis.service_level > 0 &&
-    typeof kpis?.fill_rate === 'number' &&
-    kpis.fill_rate > 0
+  const hasRlAgent = kpis?.rl_agent_loaded === true
 
   const metricStatus = {
     smape:
@@ -155,6 +151,11 @@ export default function Dashboard() {
                   />
                 </div>
               </>
+            ) : kpis ? (
+              <p className="rounded-2xl border border-dashed border-slate-300 p-4 text-sm text-slate-500 dark:border-slate-600 dark:text-slate-400">
+                RL agent not loaded. Service level, fill rate and cost appear once an RL agent is
+                available.
+              </p>
             ) : null}
 
             <div className="grid gap-4 lg:grid-cols-3">

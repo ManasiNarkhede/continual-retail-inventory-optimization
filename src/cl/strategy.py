@@ -333,26 +333,31 @@ class AvalancheCLStrategy:
         for index, experience in enumerate(benchmark.train_stream):
             logger.info("Training on experience %d/%d", index + 1, total_experiences)
 
-            if packnet is not None:
-                try:
-                    packnet.apply_masks()
-                except Exception:
-                    pass
-
             # Compute isolated loss before joint training modifies the model
             isolated_loss = self._compute_isolated_loss(experience)
 
             self.strategy.train(experience)
+            if packnet is not None:
+                # Avalanche training updates every weight; restore task-owned ones before eval.
+                try:
+                    packnet.apply_masks()
+                except Exception:
+                    pass
             eval_results = self.strategy.eval(benchmark.test_stream[: index + 1])
 
-            # Extract joint loss for this experience
+            # Extract joint loss for this experience, e.g.
+            # "Loss_Exp/eval_phase/test_stream/Task000/Exp002" for index 2.
             joint_loss = isolated_loss  # fallback
+            exp_suffix = f"/exp{index:03d}"
             for key, value in eval_results.items():
-                if isinstance(value, (int, float)):
-                    key_str = str(key).lower()
-                    if f"experience_{index}" in key_str and "loss" in key_str:
-                        joint_loss = float(value)
-                        break
+                key_str = str(key).lower().rstrip("/")
+                if (
+                    isinstance(value, (int, float))
+                    and key_str.startswith("loss_exp/")
+                    and key_str.endswith(exp_suffix)
+                ):
+                    joint_loss = float(value)
+                    break
 
             intransigence = max(0.0, joint_loss - isolated_loss)
             self.intransigence_values.append(intransigence)
@@ -379,16 +384,18 @@ class AvalancheCLStrategy:
             adaptive_ratio = 0.0
             if packnet is not None and intransigence >= self.dynamic_prune_threshold:
                 try:
-                    packnet.prune_and_freeze(task_id=index, intransigence=intransigence)
-                    packnet.apply_masks()
-                    dynamic_pruned = True
-                    adaptive_ratio = float(packnet.scheduler.compute_ratio(intransigence))
-                    logger.info(
-                        "Dynamic PackNet pruning triggered at experience %d (I=%.4f, ratio=%.3f)",
-                        index,
-                        intransigence,
-                        adaptive_ratio,
-                    )
+                    # An empty result means the capacity guard skipped pruning.
+                    if packnet.prune_and_freeze(task_id=index, intransigence=intransigence):
+                        packnet.apply_masks()
+                        dynamic_pruned = True
+                        adaptive_ratio = float(packnet.last_prune_ratio)
+                        logger.info(
+                            "Dynamic PackNet pruning triggered at experience %d "
+                            "(I=%.4f, ratio=%.3f)",
+                            index,
+                            intransigence,
+                            adaptive_ratio,
+                        )
                 except Exception as exc:
                     logger.warning(
                         "Dynamic PackNet pruning failed at experience %d: %s", index, exc
@@ -419,15 +426,17 @@ class AvalancheCLStrategy:
         logger.info("Saved CL metrics to %s", output)
 
     def close(self) -> None:
-        """Release resources (file handles)."""
-        if self._log_file_handle is not None:
+        """Release resources (file handles). Safe to call even if ``__init__`` failed."""
+        log_handle = getattr(self, "_log_file_handle", None)
+        if log_handle is not None:
             try:
-                self._log_file_handle.close()
+                log_handle.close()
             except Exception:
                 pass
             self._log_file_handle = None
-        if self.eval_plugin is not None:
-            for logger_obj in getattr(self.eval_plugin, "loggers", []):
+        eval_plugin = getattr(self, "eval_plugin", None)
+        if eval_plugin is not None:
+            for logger_obj in getattr(eval_plugin, "loggers", []):
                 close_fn = getattr(logger_obj, "close", None)
                 if callable(close_fn):
                     try:

@@ -124,12 +124,16 @@ class PackNetStrategy:
         self.model = model
         self.prune_ratio = float(prune_ratio)
         self.retrain_epochs = int(retrain_epochs)
+        # Per-task 0/1 masks of the weights each task owns (disjoint across tasks).
         self.masks: dict[int, dict[str, torch.Tensor]] = {}
-        self.frozen_params: set[str] = set()
+        # Per-parameter boolean union of all owned weights, and their frozen values.
+        self.assigned: dict[str, torch.Tensor] = {}
+        self.frozen_values: dict[str, torch.Tensor] = {}
         self.scheduler = adaptive_scheduler or AdaptivePruningScheduler(
             base_prune_ratio=self.prune_ratio,
         )
         self.layer_prune_history: dict[int, dict[str, float]] = {}
+        self.last_prune_ratio = 0.0
 
     def train_task(
         self,
@@ -170,8 +174,9 @@ class PackNetStrategy:
                 loss.backward()
 
                 for name, param in self.model.named_parameters():
-                    if name in self.frozen_params and param.grad is not None:
-                        param.grad.zero_()
+                    owned = self.assigned.get(name)
+                    if owned is not None and param.grad is not None:
+                        param.grad.masked_fill_(owned.to(param.grad.device), 0.0)
 
                 optimizer.step()
                 epoch_loss += float(loss.item())
@@ -188,20 +193,23 @@ class PackNetStrategy:
         task_id: int,
         intransigence: float = 0.0,
     ) -> dict[str, float]:
-        """Prune low-magnitude weights and freeze assignments for task.
+        """Prune low-magnitude free weights and freeze the rest for this task.
 
-        The pruning ratio is adjusted by the ``AdaptivePruningScheduler``
-        based on the intransigence of the current experience.
+        Only weights not owned by earlier tasks are considered. The largest of
+        them are assigned to ``task_id`` and frozen; the pruned ones are zeroed
+        and stay free for later tasks. The pruning ratio is adjusted by the
+        ``AdaptivePruningScheduler`` based on the intransigence of the experience.
 
         Args:
             task_id: Integer task ID.
             intransigence: Intransigence metric for this task (from CL strategy).
 
         Returns:
-            Mapping from layer name to pruned fraction.
+            Mapping from layer name to the fraction of its free weights pruned.
         """
         # Adaptive ratio based on intransigence
         effective_ratio = self.scheduler.compute_ratio(intransigence)
+        self.last_prune_ratio = effective_ratio
         logger.info(
             "PackNet task %d adaptive prune ratio: %.3f (intransigence=%.4f)",
             task_id,
@@ -215,22 +223,32 @@ class PackNetStrategy:
             return {}
 
         stats: dict[str, float] = {}
-        self.masks[task_id] = {}
+        task_masks = self.masks.setdefault(task_id, {})
         for name, param in self.model.named_parameters():
-            if name in self.frozen_params or not param.requires_grad:
+            if not param.requires_grad or param.data.dim() < 1:
                 continue
-            if param.data.dim() < 1:
+            magnitudes = param.data.detach().abs()
+            owned = self.assigned.get(name, torch.zeros_like(magnitudes, dtype=torch.bool))
+            free = ~owned
+            if not bool(free.any()):
                 continue
 
-            values = param.data.detach().abs().cpu().numpy().reshape(-1)
-            threshold = float(np.quantile(values, effective_ratio))
-            mask = (param.data.detach().abs() > threshold).float()
+            # Rank-based: prune exactly floor(ratio * n_free) of the smallest free weights.
+            free_idx = free.reshape(-1).nonzero().squeeze(1)
+            n_keep = free_idx.numel() - int(effective_ratio * free_idx.numel())
+            top = magnitudes.reshape(-1)[free_idx].topk(n_keep).indices
+            keep = torch.zeros_like(free).reshape(-1)
+            keep[free_idx[top]] = True
+            keep = keep.reshape(free.shape)
             with torch.no_grad():
-                param.data.mul_(mask)
+                param.data.masked_fill_(free & ~keep, 0.0)
 
-            self.masks[task_id][name] = mask
-            self.frozen_params.add(name)
-            stats[name] = 1.0 - float(mask.mean().item())
+            # Masks are disjoint, so adding accumulates repeated calls for the same task.
+            task_masks[name] = task_masks.get(name, torch.zeros_like(param.data)) + keep.float()
+            self.assigned[name] = owned | keep
+            frozen = self.frozen_values.get(name, torch.zeros_like(param.data))
+            self.frozen_values[name] = torch.where(keep, param.data.detach(), frozen)
+            stats[name] = 1.0 - float(keep.sum().item()) / float(free.sum().item())
 
             if mlflow.active_run() is not None:
                 metric_name = f"packnet_layer_prune_ratio_{name.replace('.', '_')}"
@@ -248,20 +266,36 @@ class PackNetStrategy:
         return stats
 
     def apply_masks(self) -> None:
-        """Re-apply all known masks to enforce frozen assignments."""
-        for task_masks in self.masks.values():
-            for pname, pmask in task_masks.items():
-                for name, param in self.model.named_parameters():
-                    if name == pname:
-                        with torch.no_grad():
-                            param.data.mul_(pmask.to(param.device))
+        """Restore every task-owned weight to its frozen value.
+
+        Training outside ``train_task`` (e.g. via Avalanche) updates all weights;
+        this re-imposes the frozen assignments while leaving free weights untouched.
+        """
+        for name, param in self.model.named_parameters():
+            owned = self.assigned.get(name)
+            if owned is None:
+                continue
+            owned = owned.to(param.device)
+            with torch.no_grad():
+                param.data.copy_(
+                    torch.where(owned, self.frozen_values[name].to(param.device), param.data)
+                )
 
     def capacity_used(self) -> float:
-        """Compute fraction of parameter capacity already assigned.
+        """Compute fraction of prunable parameter capacity already assigned to tasks.
+
+        Only trainable parameters with at least one dimension can be assigned,
+        so only those count towards the total.
 
         Returns:
             Capacity ratio in ``[0, 1]``.
         """
-        total = sum(param.numel() for param in self.model.parameters())
-        assigned = sum(mask.sum().item() for task in self.masks.values() for mask in task.values())
+        total = 0
+        assigned = 0
+        for name, param in self.model.named_parameters():
+            if not param.requires_grad or param.data.dim() < 1:
+                continue
+            total += param.numel()
+            if name in self.assigned:
+                assigned += int(self.assigned[name].sum().item())
         return float(assigned / max(total, 1))

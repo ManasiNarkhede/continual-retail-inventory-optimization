@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -110,9 +110,11 @@ class KpiResponse(BaseModel):
     smape_uplift_vs_baseline: float
     rmse: float
     coverage_80pct: float
-    service_level: float
-    fill_rate: float = 0.0
-    total_cost: float = 0.0
+    # Inventory KPIs come from RL simulation only; None when no RL agent is loaded.
+    service_level: Optional[float] = None
+    fill_rate: Optional[float] = None
+    total_cost: Optional[float] = None
+    rl_agent_loaded: bool = False
     cost_saved: float
     bwt: float
     model_version: str

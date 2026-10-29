@@ -6,20 +6,21 @@ Each experience equals one month of data across all stores.
 
 from __future__ import annotations
 
-import importlib
+import importlib.util
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import pandas as pd
 import torch
-from torch.utils.data import TensorDataset, random_split
+from torch.utils.data import Dataset, TensorDataset, random_split
+
+BenchmarkFactory = Callable[[list[Dataset], list[Dataset]], Any]
 
 
-def _load_avalanche_symbols() -> tuple[Any, Any]:
-    """Load Avalanche benchmark symbols lazily.
+def _load_benchmark_factory() -> BenchmarkFactory:
+    """Return a ``(train, test) -> benchmark`` builder for the installed Avalanche version.
 
-    Returns:
-        Tuple of (dataset_benchmark_fn, AvalancheDataset class).
+    The returned benchmark always exposes ``train_stream`` and ``test_stream``.
 
     Raises:
         ImportError: If required Avalanche symbols are unavailable.
@@ -31,17 +32,27 @@ def _load_avalanche_symbols() -> tuple[Any, Any]:
     if utils_spec is None:
         raise ImportError("avalanche-lib benchmark utilities are unavailable in this environment.")
 
-    from avalanche.benchmarks.utils import AvalancheDataset
-
     if generators_spec is not None:
+        # avalanche-lib < 0.5 accepts plain tensor datasets and subsets.
         from avalanche.benchmarks.generators import dataset_benchmark
 
-        return dataset_benchmark, AvalancheDataset
+        def legacy_factory(train: list[Dataset], test: list[Dataset]) -> Any:
+            return dataset_benchmark(train_datasets=train, test_datasets=test)
+
+        return legacy_factory
 
     if scenario_spec is not None:
+        # avalanche-lib >= 0.5 requires AvalancheDatasets; stream names come from the keywords.
         from avalanche.benchmarks.scenarios.dataset_scenario import benchmark_from_datasets
+        from avalanche.benchmarks.utils import AvalancheDataset
 
-        return benchmark_from_datasets, AvalancheDataset
+        def factory(train: list[Dataset], test: list[Dataset]) -> Any:
+            return benchmark_from_datasets(
+                train=[AvalancheDataset([ds]) for ds in train],
+                test=[AvalancheDataset([ds]) for ds in test],
+            )
+
+        return factory
 
     raise ImportError(
         "Unsupported avalanche-lib layout for benchmark builders. "
@@ -88,7 +99,7 @@ class AvalancheExperienceBuilder:
         Raises:
             ImportError: If avalanche-lib benchmark utilities are unavailable.
         """
-        dataset_benchmark, AvalancheDataset = _load_avalanche_symbols()
+        build_benchmark = _load_benchmark_factory()
 
         data = df.copy().sort_values("Date")
         if target_col not in data.columns:
@@ -112,7 +123,7 @@ class AvalancheExperienceBuilder:
             features = torch.tensor(month_df[feature_cols].values, dtype=torch.float32)
             targets = torch.tensor(month_df[target_col].values, dtype=torch.float32)
 
-            base_dataset = AvalancheDataset(TensorDataset(features, targets))
+            base_dataset = TensorDataset(features, targets)
             n_val = max(1, int(0.1 * len(base_dataset)))
             n_train = len(base_dataset) - n_val
             if n_train <= 0:
@@ -131,5 +142,4 @@ class AvalancheExperienceBuilder:
             parquet_path = self.output_dir / f"experience_{index:02d}_{month}.parquet"
             month_df.to_parquet(parquet_path, index=False)
 
-        benchmark = dataset_benchmark(train_datasets=train_datasets, test_datasets=test_datasets)
-        return benchmark
+        return build_benchmark(train_datasets, test_datasets)
