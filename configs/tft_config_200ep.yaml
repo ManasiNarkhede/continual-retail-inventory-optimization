@@ -1,0 +1,54 @@
+tft:
+  max_prediction_length: 28
+  max_encoder_length: 90
+  batch_size: 64
+  max_epochs: 200
+  learning_rate: 0.0003
+  gradient_clip_val: 0.1
+  hidden_size: 256
+  lstm_layers: 2
+  num_attention_heads: 4
+  dropout: 0.15
+  hidden_continuous_size: 64
+  output_size: 7
+  quantiles: [0.02, 0.1, 0.25, 0.5, 0.75, 0.9, 0.98]
+  reduce_on_plateau_patience: 6
+  weight_decay: 1e-4
+  under_penalty_factor: 2.0
+
+  time_varying_known_reals:
+    - "day_of_week"
+    - "day_of_month"
+    - "month"
+    - "week_of_year"
+    - "days_to_holiday"
+    - "days_after_holiday"
+    - "promo"
+    - "promo2"
+    - "school_holiday"
+    - "dow_sin"
+    - "dow_cos"
+    - "month_sin"
+    - "month_cos"
+  time_varying_unknown_reals:
+    - "sales"
+    - "customers"
+    - "sales_7d_lag"
+    - "sales_14d_lag"
+    - "sales_28d_lag"
+    - "rolling_mean_7d"
+    - "rolling_std_7d"
+    - "ewma_sales_7d"
+    - "ewma_sales_28d"
+  static_categoricals:
+    - "store"
+    - "store_type"
+    - "assortment"
+    - "state_holiday"
+  static_reals:
+    - "competition_distance"
+    - "competition_open_since_months"
+    - "promo2_since_weeks"
+
+  target: "sales"
+  target_normalizer: "GroupNormalizer"

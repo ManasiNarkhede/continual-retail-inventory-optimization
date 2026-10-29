@@ -1,0 +1,95 @@
+[project]
+name = "retail-inventory-opt"
+version = "0.1.0"
+requires-python = ">=3.10"
+description = "Retail inventory optimization using TFT + Continual Learning + RL"
+
+[tool.black]
+line-length = 100
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+# Scripts bootstrap sys.path and tests call pytest.importorskip before project imports.
+"scripts/*" = ["E402"]
+"tests/*" = ["E402"]
+
+[tool.coverage.run]
+source = ["src", "configs"]
+omit = [
+    "*/__init__.py",
+    "src/cl/ablation.py",
+    "src/cl/plugins.py",
+    "src/eval/calibrate_loss.py",
+    "src/eval/reward_sensitivity.py",
+    "src/models/lr_finder.py",
+    "src/models/tft_trainer.py",
+    "src/eval/harness.py",
+    "src/main.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
+fail_under = 80
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+scripts_are_modules = true
+ignore_missing_imports = true
+follow_imports = "skip"
+files = [
+  "src/eval/demand_scenario.py",
+  "src/eval/metric_names.py",
+  "src/utils/json_logger.py",
+  "src/api/main.py",
+  "src/api/model_registry.py",
+  "src/api/routers/forecast.py",
+  "src/api/routers/metrics.py",
+  "tests/test_eval/test_demand_scenario.py",
+  "tests/test_eval/test_metric_names.py",
+]
+exclude = [
+  "^frontend/",
+  "^notebooks/",
+  "^outputs/",
+  "^\\.venv39/",
+]
+
+[[tool.mypy.overrides]]
+module = [
+  "avalanche.*",
+  "pytorch_forecasting.*",
+  "stable_baselines3.*",
+  "mlflow.*",
+  "optuna.*",
+  "gymnasium.*",
+  "shap.*",
+  "yaml",
+  "yaml.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+  "src.api.main",
+  "src.api.routers.forecast",
+  "src.api.routers.metrics",
+]
+disallow_untyped_decorators = false

@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["environment", "agent"],
+  "properties": {
+    "environment": {
+      "type": "object",
+      "required": ["forecast_horizon", "episode_length"],
+      "properties": {
+        "forecast_horizon": { "type": "integer", "minimum": 1 },
+        "episode_length": { "type": "integer", "minimum": 1 },
+        "reward_class": {
+          "type": "string",
+          "enum": ["TripleTierReward", "MultiObjectiveReward", "BaseReward", "ShapedReward"]
+        }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "required": ["algorithm", "total_timesteps"],
+      "properties": {
+        "algorithm": { "type": "string", "enum": ["PPO", "SAC"] },
+        "total_timesteps": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

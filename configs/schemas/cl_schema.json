@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["continual_learning"],
+  "properties": {
+    "continual_learning": {
+      "type": "object",
+      "required": ["strategy", "train_mb_size", "train_epochs", "eval_mb_size"],
+      "properties": {
+        "strategy": { "type": "string", "enum": ["EWC", "Replay", "Naive"] },
+        "train_mb_size": { "type": "integer", "minimum": 1 },
+        "train_epochs": { "type": "integer", "minimum": 1 },
+        "eval_mb_size": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

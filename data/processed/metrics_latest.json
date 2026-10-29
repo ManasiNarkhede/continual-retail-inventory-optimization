@@ -1,0 +1,15 @@
+{
+  "model_version": "tft_all_stores.pt",
+  "timestamp_utc": "2026-05-20T15:30:00.000000+00:00",
+  "val_smape": 7.78,
+  "val_rmse": 862.26,
+  "val_coverage_80pct": 0.8036,
+  "stores_trained": 1115,
+  "baseline_smape": 20.4814,
+  "baseline_rmse": 1303.8615,
+  "training_batches": 13,
+  "status": "production_ready",
+  "service_level": 0.967,
+  "fill_rate": 0.943,
+  "total_cost": 18450.0
+}

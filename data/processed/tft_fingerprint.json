@@ -1,0 +1,8 @@
+{
+  "rows": 753,
+  "stores": 1,
+  "min_date": "2013-02-04 00:00:00",
+  "max_date": "2015-07-31 00:00:00",
+  "sha256": "6451f95d5b952fcd62c632e6ebf10839d8b11a0f3de23bea897ebe3b32b56022",
+  "config_path": "D:\\rossmann-optimization-test\\retail_inventory_opt\\data\\processed\\tft_runtime_config.yaml"
+}

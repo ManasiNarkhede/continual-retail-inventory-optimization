@@ -1,0 +1,9 @@
+{
+  "strategy": "Replay",
+  "bwt": -0.0185,
+  "fwt": 0.0241,
+  "plasticity": 0.8672,
+  "stability": 0.9124,
+  "experience_accs": [0.8512, 0.8615, 0.8704, 0.8768, 0.8811, 0.8934],
+  "source": "offline_tuned_profile"
+}

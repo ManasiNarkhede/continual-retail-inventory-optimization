@@ -1,0 +1,28 @@
+api:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 1
+  reload: true
+  log_level: "info"
+  allowed_origins:
+    - "http://localhost:5173"
+    - "http://localhost:3000"
+  title: "Retail Inventory Optimization API"
+  version: "0.1.0"
+
+models:
+  tft_checkpoint: "checkpoints/tft/tft_latest.pt"
+  processed_data: "data/processed/tft_reference.parquet"
+  runtime_config: "data/processed/tft_runtime_config.yaml"
+  rl_checkpoint: "checkpoints/rl/inventory_agent.zip"
+  cl_metrics: "data/processed/cl_metrics_latest.json"
+  cache_ttl_seconds: 900
+  forecast_interval_scale: 2.5
+  forecast_warmup_top_n: 10
+  forecast_warmup_horizon: 14
+  model_version: "runtime"
+
+cors:
+  allow_origins:
+    - "http://localhost:5173"
+    - "http://localhost:3000"

@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["tft"],
+  "properties": {
+    "tft": {
+      "type": "object",
+      "required": ["quantiles", "max_encoder_length", "max_prediction_length", "target"],
+      "properties": {
+        "quantiles": {
+          "type": "array",
+          "minItems": 3,
+          "items": { "type": "number", "minimum": 0, "maximum": 1 }
+        },
+        "max_encoder_length": { "type": "integer", "minimum": 1 },
+        "max_prediction_length": { "type": "integer", "minimum": 1 },
+        "target": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "train_index_rows": 752,
+  "val_index_rows": 780,
+  "train_index_sha256": "407a2acb1c837914206504c82d835ce618e51be10dc9b4d9a54d9144fb7eeaa5",
+  "val_index_sha256": "7fe36692dfd5fb210b668b82b84e60f427b6d4b5dbffd4d34c7497bae0446aa4"
+}

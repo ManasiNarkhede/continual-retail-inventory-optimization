@@ -1,0 +1,56 @@
+tft:
+  max_prediction_length: 14
+  max_encoder_length: 30
+  batch_size: 8        # Reduced from 128 for better generalization on CPU
+  max_epochs: 200         # Increased from 50 to 200 for better convergence
+  learning_rate: 0.0005   # Reduced from 0.001 for finer convergence
+  gradient_clip_val: 0.1
+  hidden_size: 32
+  lstm_layers: 2
+  num_attention_heads: 2
+  dropout: 0.15           # Increased from 0.1 for regularization
+  hidden_continuous_size: 16
+  output_size: 7
+  quantiles: [0.02, 0.1, 0.25, 0.5, 0.75, 0.9, 0.98]
+  reduce_on_plateau_patience: 8
+  weight_decay: 0.0001
+
+  # Asymmetric loss: penalise under-estimation more to improve calibration
+  under_penalty_factor: 2.0  # Increased from 1.5 for better coverage
+
+  time_varying_known_reals:
+    - "day_of_week"
+    - "day_of_month"
+    - "month"
+    - "week_of_year"
+    - "days_to_holiday"
+    - "days_after_holiday"
+    - "promo"
+    - "promo2"
+    - "school_holiday"
+    - "dow_sin"
+    - "dow_cos"
+    - "month_sin"
+    - "month_cos"
+  time_varying_unknown_reals:
+    - "sales"
+    - "customers"
+    - "sales_7d_lag"
+    - "sales_14d_lag"
+    - "sales_28d_lag"
+    - "rolling_mean_7d"
+    - "rolling_std_7d"
+    - "ewma_sales_7d"
+    - "ewma_sales_28d"
+  static_categoricals:
+    - "store"
+    - "store_type"
+    - "assortment"
+    - "state_holiday"
+  static_reals:
+    - "competition_distance"
+    - "competition_open_since_months"
+    - "promo2_since_weeks"
+
+  target: "sales"
+  target_normalizer: "GroupNormalizer"

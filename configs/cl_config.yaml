@@ -1,0 +1,24 @@
+continual_learning:
+  strategy: "Replay"
+  enable_packnet_scheduler: true
+  dynamic_prune_threshold: 0.08
+  packnet_base_prune_ratio: 0.5
+  ewc_lambda: 200.0
+  replay_mem_size: 2000
+  num_experiences: 6
+  train_mb_size: 64
+  train_epochs: 8
+  eval_mb_size: 64
+  device: "cpu"
+
+  plugins:
+    - "EvaluationPlugin"
+    - "ExperienceForgetting"
+    - "StreamForgetting"
+    - "ExperienceAccuracy"
+
+  targets:
+    bwt_min: -0.02
+    fwt_min: 0.01
+    stability_min: 0.90
+    plasticity_min: 0.86

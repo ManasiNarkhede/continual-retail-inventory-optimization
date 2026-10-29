@@ -1,0 +1,7 @@
+orchestration:
+  enabled: false
+  backend: "prefect"
+  prefect:
+    flow_name: "retail-inventory-pipeline"
+    server_url: "http://localhost:4200/api"
+  data_dir: "data/raw"

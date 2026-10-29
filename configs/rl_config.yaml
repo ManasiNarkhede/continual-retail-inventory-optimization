@@ -1,0 +1,51 @@
+environment:
+  initial_stock: 100
+  max_stock: 500
+  max_order: 200
+  lead_time: 2
+  lead_time_mode: "fixed"   # fixed | poisson | normal
+  lead_time_poisson_lambda: 2.0
+  lead_time_normal_mean: 2.0
+  lead_time_normal_std: 0.5
+  holding_cost: 0.5
+  stockout_cost: 5.0
+  stockout_severity: 0.05
+  use_multi_objective_reward: true
+  reward_class: "TripleTierReward"
+  risk_aversion: 0.5
+  service_level_target: 0.95
+  order_cost: 10.0
+  episode_length: 365
+  forecast_horizon: 7
+
+agent:
+  algorithm: "PPO"
+  policy: "MlpPolicy"
+  total_timesteps: 500000
+  enable_curriculum: false
+  curriculum_levels: 3
+  learning_rate: 0.0003
+  n_steps: 2048
+  batch_size: 64
+  n_epochs: 10
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.01
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  verbose: 1
+  tensorboard_log: "./logs/rl_tensorboard"
+
+  sac:
+    buffer_size: 1000000
+    learning_starts: 10000
+    tau: 0.005
+    ent_coef: "auto"
+
+mlflow:
+  experiment_name: "retail_rl_inventory"
+  tracking_uri: "http://localhost:5000"
+  run_tags:
+    project: "retail_inventory_opt"
+    dataset: "rossmann"

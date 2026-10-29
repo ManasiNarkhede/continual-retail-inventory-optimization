@@ -1,0 +1,37 @@
+FROM python:3.11-slim AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+COPY requirements.lock.txt /app/requirements.lock.txt
+COPY requirements.txt /app/requirements.txt
+RUN pip install --upgrade pip && pip install --no-cache-dir -r /app/requirements.lock.txt
+
+FROM python:3.11-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PATH="/opt/venv/bin:$PATH"
+
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+WORKDIR /app
+
+COPY --from=builder /opt/venv /opt/venv
+COPY src /app/src
+COPY configs /app/configs
+COPY scripts /app/scripts
+COPY checkpoints /app/checkpoints
+COPY data /app/data
+COPY requirements.txt /app/requirements.txt
+COPY requirements.lock.txt /app/requirements.lock.txt
+
+RUN chown -R appuser:appgroup /app /opt/venv
+USER appuser
+
+EXPOSE 8000
+
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
