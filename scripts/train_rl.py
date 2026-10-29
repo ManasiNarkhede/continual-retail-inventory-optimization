@@ -66,7 +66,8 @@ def main(config_path: str, total_timesteps: int | None = None, n_stores: int = 8
     runtime_config_path, runtime_tmp = _prepare_runtime_config(config_path, total_timesteps)
     validate_configs(tft_config_path="configs/tft_config.yaml", rl_config_path=runtime_config_path)
     loader = RossmannDataLoader("data/raw")
-    train_df, _ = loader.load()
+    # Keep closed days: real store calendars (and the API simulation) contain them.
+    train_df, _ = loader.load(drop_closed=False)
     train_df = RossmannPreprocessor().fit_transform(train_df)
     train_df = FeatureEngineer().transform(train_df)
 

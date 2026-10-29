@@ -401,8 +401,8 @@ class RetailInventoryEnv(gym.Env):
         if self.store_open_series is not None:
             idx = timestep % len(self.store_open_series)
             return float(self.store_open_series[idx])
-        # Default: open every day except Sunday (day_of_week == 6)
-        return 0.0 if (timestep % 7 == 6) else 1.0
+        # Default: closed on zero-demand days (closures are scheduled, so known ahead).
+        return 1.0 if self.demand_series[timestep % len(self.demand_series)] > 0 else 0.0
 
     def _get_forecast_with_uncertainty(self) -> tuple[np.ndarray, float]:
         """Get forecast vector and scalar uncertainty width (p90 − p10).

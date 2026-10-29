@@ -241,10 +241,10 @@ def test_store_open_series_drives_observation(tmp_path: Path) -> None:
     assert values == [1.0, 0.0, 1.0, 1.0]
 
 
-def test_default_store_open_closed_on_day_six(tmp_path: Path) -> None:
-    """Without a series the store is closed on every 7th day only."""
-    env = _env(tmp_path)
-    assert [env._get_store_open(t) for t in range(8)] == [1, 1, 1, 1, 1, 1, 0, 1]
+def test_default_store_open_follows_zero_demand_days(tmp_path: Path) -> None:
+    """Without a series the store counts as closed on zero-demand days (cyclic)."""
+    env = _env(tmp_path, demand=np.array([50.0, 0.0, 50.0, 50.0]))
+    assert [env._get_store_open(t) for t in range(6)] == [1, 0, 1, 1, 1, 0]
 
 
 def test_quantile_forecast_padding_and_uncertainty(tmp_path: Path) -> None:

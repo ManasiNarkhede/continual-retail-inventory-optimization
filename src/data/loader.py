@@ -37,8 +37,12 @@ class RossmannDataLoader:
         """
         self.data_dir = Path(data_dir)
 
-    def load(self) -> tuple[pd.DataFrame, pd.DataFrame]:
+    def load(self, drop_closed: bool = True) -> tuple[pd.DataFrame, pd.DataFrame]:
         """Load and merge train/test with store metadata.
+
+        Args:
+            drop_closed: Drop closed / zero-sales days (forecasting). ``False`` keeps the
+                full store calendar, which inventory simulation needs.
 
         Returns:
             Tuple of (train_df, test_df) with store columns merged in.
@@ -56,9 +60,9 @@ class RossmannDataLoader:
         train["Date"] = pd.to_datetime(train["Date"])
         test["Date"] = pd.to_datetime(test["Date"])
 
-        if "Open" in train.columns:
+        if drop_closed and "Open" in train.columns:
             train = train[train["Open"] == 1].copy()
-        if "Sales" in train.columns:
+        if drop_closed and "Sales" in train.columns:
             train = train[train["Sales"] > 0].copy()
 
         train = self.validate_train_schema(train)

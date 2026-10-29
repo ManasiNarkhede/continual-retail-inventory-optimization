@@ -29,7 +29,8 @@ def test_loader_reads_and_merges(tmp_path: Path) -> None:
     _write_csv(
         tmp_path / "train.csv",
         "Store,DayOfWeek,Date,Sales,Customers,Open,Promo,StateHoliday,SchoolHoliday\n"
-        "1,1,2015-01-01,100,20,1,1,0,0\n",
+        "1,1,2015-01-01,100,20,1,1,0,0\n"
+        "1,7,2015-01-04,0,0,0,0,0,0\n",
     )
     _write_csv(
         tmp_path / "test.csv",
@@ -40,11 +41,13 @@ def test_loader_reads_and_merges(tmp_path: Path) -> None:
         "Store,StoreType,Assortment,CompetitionDistance\n1,a,a,100\n",
     )
 
-    train_df, test_df = RossmannDataLoader(tmp_path).load()
-    assert not train_df.empty
+    loader = RossmannDataLoader(tmp_path)
+    train_df, test_df = loader.load()
+    assert len(train_df) == 1  # closed day dropped by default
     assert not test_df.empty
     assert "StoreType" in train_df.columns
     assert pd.api.types.is_datetime64_any_dtype(train_df["Date"])
+    assert loader.load(drop_closed=False)[0]["Sales"].tolist() == [100, 0]
 
 
 def test_loader_missing_file_raises(tmp_path: Path) -> None:

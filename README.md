@@ -181,6 +181,7 @@ python scripts/train_tft.py --config configs/tft_config.yaml
 python scripts/train_cl.py --cl-config configs/cl_config.yaml
 
 # RL agent (algorithm set in configs/rl_config.yaml: PPO | SAC); trains on N stores in parallel
+# over full store calendars (closed days kept as zero demand)
 python scripts/train_rl.py --config configs/rl_config.yaml --n-stores 8
 #   --total-timesteps N     override agent.total_timesteps (default 1.5M, ~75 min on CPU)
 ```
