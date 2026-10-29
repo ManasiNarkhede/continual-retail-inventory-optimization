@@ -10,7 +10,7 @@ import mlflow
 import numpy as np
 from stable_baselines3 import PPO, SAC
 from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.vec_env import DummyVecEnv
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
 from configs.validator import load_yaml_config, validate_config_schema
 from src.rl.callbacks import InventoryMetricsCallback
@@ -97,6 +97,13 @@ class RLInventoryAgent:
             vec_env = DummyVecEnv([_make_env(single_env) for single_env in self.env.envs])
         else:
             vec_env = DummyVecEnv([lambda: self.env])
+        if self.agent_cfg.get("normalize_reward", False):
+            # Inventory costs reach ~1e6 per episode; unscaled, the value loss dominates the
+            # clipped gradient and the policy barely learns. Observations stay raw, so
+            # inference (API, evaluation) needs no saved normalization statistics.
+            vec_env = VecNormalize(
+                vec_env, norm_obs=False, norm_reward=True, gamma=self.agent_cfg["gamma"]
+            )
         model_kwargs = {
             "policy": self.agent_cfg["policy"],
             "env": vec_env,

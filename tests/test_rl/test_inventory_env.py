@@ -50,9 +50,13 @@ def test_observation_layout_is_clipped_and_exposed(tmp_path: Path) -> None:
     assert info == {}
     assert obs.shape == (HORIZON + 9,)
     assert obs[0] == pytest.approx(100 / 500)
+    assert obs[HORIZON + 4] == 0.0  # nothing in transit yet
     assert obs[HORIZON + 5] == 1.0  # stockout_cost / 10 = 2.0, clipped
     assert np.all((obs >= -1.0) & (obs <= 1.0))
     np.testing.assert_array_equal(env.get_observation(), obs)
+    # A full order (200 units, lead time 2) shows up as in-transit inventory.
+    obs, *_ = env.step(FULL_ORDER)
+    assert obs[HORIZON + 4] == pytest.approx(200 / 500)
 
 
 # -----------------------------------------------------------------------
@@ -335,6 +339,38 @@ def test_orders_arrive_after_lead_time(tmp_path: Path) -> None:
     # 100-50=50, 50-50=0, then +200 arrival -50 = 150.
     assert stocks == [50.0, 0.0, 150.0]
     assert env.total_orders == 10.0
+
+
+@pytest.mark.parametrize("with_quantiles", [False, True], ids=["series", "quantile_forecast"])
+def test_demand_scale_converts_sales_to_inventory_units(
+    tmp_path: Path, with_quantiles: bool
+) -> None:
+    """An env fed sales in EUR with demand_scale=100 behaves exactly like one fed units."""
+    units = np.array([40.0, 60.0, 55.0, 70.0, 45.0, 65.0, 50.0, 80.0, 30.0, 52.0])
+
+    def _make(scale: float, subdir: str) -> RetailInventoryEnv:
+        (tmp_path / subdir).mkdir()
+        kwargs = {}
+        if with_quantiles:
+            kwargs["forecast_quantiles_fn"] = lambda t: (
+                units * 0.8 * scale,
+                units * scale,
+                units * 1.2 * scale,
+            )
+        return _env(tmp_path / subdir, demand=units * scale, cfg={"demand_scale": scale}, **kwargs)
+
+    eur, unit = _make(100.0, "eur"), _make(1.0, "units")
+    np.testing.assert_allclose(eur.reset()[0], unit.reset()[0])
+    for action in (FULL_ORDER, NO_ORDER, np.array([0.0]), FULL_ORDER):
+        obs_eur, reward_eur, *_, info_eur = eur.step(action)
+        obs_unit, reward_unit, *_, info_unit = unit.step(action)
+        np.testing.assert_allclose(obs_eur, obs_unit)
+        assert reward_eur == pytest.approx(reward_unit)
+        assert info_eur == pytest.approx(info_unit)
+    assert info_eur["demand"] == pytest.approx(70.0)  # 7000 EUR of sales on day 4
+    assert (eur.fill_rate(), eur.total_cost()) == pytest.approx(
+        (unit.fill_rate(), unit.total_cost())
+    )
 
 
 def test_fill_rate_counts_arriving_order_once(tmp_path: Path) -> None:

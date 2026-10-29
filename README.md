@@ -89,7 +89,7 @@ The following are generated locally and are **not committed** (see `.gitignore`)
 | `data/` | `loader`, `validator`, `schemas`, `preprocessor`, `feature_engineer`, `experience_builder` (Avalanche experiences) |
 | `models/` | `tft_dataset`, `tft_model`, `tft_trainer`, `tft_interpretability`, `lr_finder` |
 | `cl/` | `strategy` (Avalanche wrapper), `packnet`, `metrics` (BWT/FWT/plasticity/stability), `plugins`, `ablation` |
-| `rl/` | `inventory_env`, `multi_store_env`, `reward` (triple-tier reward), `agent` (PPO/SAC), `curriculum`, `callbacks` |
+| `rl/` | `inventory_env`, `multi_store_env`, `reward` (linear, shaped, triple-tier and multi-objective rewards), `agent` (PPO/SAC), `curriculum`, `callbacks` |
 | `eval/` | Forecast and inventory metrics, baselines, backtest harness, demand scenarios, reward sensitivity, SHAP explainer |
 | `hpo/` | Optuna studies: `run_tft_hpo`, `run_rl_hpo` |
 | `orchestration/` | Optional Prefect flow wrapping the full pipeline |
@@ -101,7 +101,7 @@ The following are generated locally and are **not committed** (see `.gitignore`)
 
 ### Prerequisites
 
-- Python 3.11 (used in CI; `pyproject.toml` requires ≥ 3.10)
+- Python 3.9 (used in CI; `pyproject.toml` requires ≥ 3.9)
 - Node.js 20 (used in CI; 18+ is expected to work)
 - Optional: a CUDA GPU for training
 
@@ -180,8 +180,9 @@ python scripts/train_tft.py --config configs/tft_config.yaml
 # Continual learning (strategy set in configs/cl_config.yaml: Naive | EWC | Replay)
 python scripts/train_cl.py --cl-config configs/cl_config.yaml
 
-# RL agent (algorithm set in configs/rl_config.yaml: PPO | SAC)
-python scripts/train_rl.py --config configs/rl_config.yaml --total-timesteps 500000
+# RL agent (algorithm set in configs/rl_config.yaml: PPO | SAC); trains on N stores in parallel
+python scripts/train_rl.py --config configs/rl_config.yaml --n-stores 8
+#   --total-timesteps N     override agent.total_timesteps (default 1.5M, ~75 min on CPU)
 ```
 
 Other useful scripts:
@@ -288,7 +289,7 @@ mypy                                     # strict on the files listed in pyproje
 python scripts/smoke_test.py
 ```
 
-CI (`.github/workflows/ci.yml`) runs ruff, black, pytest with coverage, and the smoke test on Python 3.11, then builds and tests the frontend on Node 20.
+CI (`.github/workflows/ci.yml`) runs ruff, black, pytest with coverage, and the smoke test on Python 3.9, then builds and tests the frontend on Node 20.
 
 ---
 

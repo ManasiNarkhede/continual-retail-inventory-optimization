@@ -1,4 +1,7 @@
 environment:
+  # Rossmann demand is daily sales in EUR; 1 inventory unit = 100 EUR of sales
+  # (median store demand ~64 units/day). All limits and costs below are in units.
+  demand_scale: 100.0
   initial_stock: 100
   max_stock: 500
   max_order: 200
@@ -10,8 +13,11 @@ environment:
   holding_cost: 0.5
   stockout_cost: 5.0
   stockout_severity: 0.05
-  use_multi_objective_reward: true
-  reward_class: "TripleTierReward"
+  use_multi_objective_reward: false
+  # Linear reward = -(per-step cost reported by total_cost()), so the agent optimises the KPI.
+  # TripleTierReward at severity 0.05 charges ~0.25/unit for small shortfalls (vs 5 in the KPI)
+  # and trained agents that stock out on most days.
+  reward_class: "BaseReward"
   risk_aversion: 0.5
   service_level_target: 0.95
   order_cost: 10.0
@@ -21,11 +27,12 @@ environment:
 agent:
   algorithm: "PPO"
   policy: "MlpPolicy"
-  total_timesteps: 500000
+  total_timesteps: 1500000
+  normalize_reward: true  # scale rewards during training only (VecNormalize)
   enable_curriculum: false
   curriculum_levels: 3
   learning_rate: 0.0003
-  n_steps: 2048
+  n_steps: 256  # per store env; 8 training stores -> 2048 samples per PPO update
   batch_size: 64
   n_epochs: 10
   gamma: 0.99

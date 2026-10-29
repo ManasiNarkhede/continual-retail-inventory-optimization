@@ -9,6 +9,7 @@
       "properties": {
         "forecast_horizon": { "type": "integer", "minimum": 1 },
         "episode_length": { "type": "integer", "minimum": 1 },
+        "demand_scale": { "type": "number", "exclusiveMinimum": 0 },
         "reward_class": {
           "type": "string",
           "enum": ["TripleTierReward", "MultiObjectiveReward", "BaseReward", "ShapedReward"]

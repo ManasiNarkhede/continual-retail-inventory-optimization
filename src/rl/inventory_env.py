@@ -110,6 +110,9 @@ class RetailInventoryEnv(gym.Env):
         self.service_level_target = float(self.cfg.get("service_level_target", 0.95))
         self.episode_length = int(self.cfg["episode_length"])
         self.horizon = int(self.cfg["forecast_horizon"])
+        # demand_series and forecasts stay in their source units (e.g. sales EUR); the env
+        # divides them by demand_scale so stock, orders and costs are in inventory units.
+        self.demand_scale = float(self.cfg.get("demand_scale", 1.0))
 
         self.demand_series = (
             np.asarray(demand_series, dtype=float)
@@ -338,7 +341,7 @@ class RetailInventoryEnv(gym.Env):
             [horizon+1]       uncertainty_width / max_demand
             [horizon+2]       store_open (1.0 or 0.0)
             [horizon+3]       lead_time / 7
-            [horizon+4]       holding_cost / 10
+            [horizon+4]       in-transit orders / max_stock
             [horizon+5]       stockout_cost / 10
             [horizon+6]       sin(2π · dow / 7)
             [horizon+7]       cos(2π · dow / 7)
@@ -348,7 +351,7 @@ class RetailInventoryEnv(gym.Env):
             Observation array clipped to [-1, 1].
         """
         forecast, uncertainty_width = self._get_forecast_with_uncertainty()
-        max_demand = max(float(np.max(self.demand_series)), 1.0)
+        max_demand = max(float(np.max(self.demand_series)) / self.demand_scale, 1.0)
         day_of_week = self.t % 7
         store_open = self._get_store_open(self.t)
 
@@ -359,7 +362,8 @@ class RetailInventoryEnv(gym.Env):
                 uncertainty_width / max_demand,
                 store_open,
                 self.current_lead_time / 7.0,
-                self.holding_cost / 10.0,
+                # Stock + in-transit (inventory position) is what an order-up-to decision needs.
+                sum(self.order_queue) / self.max_stock,
                 self.stockout_cost / 10.0,
                 np.sin(2 * np.pi * day_of_week / 7),
                 np.cos(2 * np.pi * day_of_week / 7),
@@ -380,10 +384,10 @@ class RetailInventoryEnv(gym.Env):
             timestep: Current step index.
 
         Returns:
-            Demand value.
+            Demand in inventory units.
         """
         idx = timestep % len(self.demand_series)
-        return float(self.demand_series[idx])
+        return float(self.demand_series[idx]) / self.demand_scale
 
     def _get_store_open(self, timestep: int) -> float:
         """Read store open status at a specific timestep.
@@ -408,9 +412,9 @@ class RetailInventoryEnv(gym.Env):
         """
         if self.forecast_quantiles_fn is not None:
             p10, p50, p90 = self.forecast_quantiles_fn(self.t)
-            p10 = np.asarray(p10, dtype=float)
-            p50 = np.asarray(p50, dtype=float)
-            p90 = np.asarray(p90, dtype=float)
+            p10 = np.asarray(p10, dtype=float) / self.demand_scale
+            p50 = np.asarray(p50, dtype=float) / self.demand_scale
+            p90 = np.asarray(p90, dtype=float) / self.demand_scale
             forecast = (
                 p50[: self.horizon]
                 if len(p50) >= self.horizon
@@ -429,17 +433,17 @@ class RetailInventoryEnv(gym.Env):
 
         forecast = self._get_forecast()
         # Without quantile info, estimate uncertainty from demand variability
-        width = float(np.std(self.demand_series) * 2.0)
+        width = float(np.std(self.demand_series) * 2.0) / self.demand_scale
         return forecast, width
 
     def _get_forecast(self) -> np.ndarray:
         """Read demand forecast for current timestep.
 
         Returns:
-            Forecast vector with length equal to horizon.
+            Forecast vector in inventory units with length equal to horizon.
         """
         if self.forecast_fn is not None:
-            forecast = np.asarray(self.forecast_fn(self.t), dtype=float)
+            forecast = np.asarray(self.forecast_fn(self.t), dtype=float) / self.demand_scale
             if forecast.shape[0] >= self.horizon:
                 return forecast[: self.horizon]
             if forecast.shape[0] == 0:
@@ -447,7 +451,7 @@ class RetailInventoryEnv(gym.Env):
             padding = np.repeat(forecast[-1], self.horizon - forecast.shape[0])
             return np.concatenate([forecast, padding])
         idxs = [(self.t + offset) % len(self.demand_series) for offset in range(self.horizon)]
-        return self.demand_series[idxs]
+        return self.demand_series[idxs] / self.demand_scale
 
     def service_level(self) -> float:
         """Compute episode service level as non-stockout ratio.

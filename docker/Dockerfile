@@ -1,4 +1,4 @@
-FROM python:3.11-slim AS builder
+FROM python:3.9-slim AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -11,7 +11,7 @@ COPY requirements.lock.txt /app/requirements.lock.txt
 COPY requirements.txt /app/requirements.txt
 RUN pip install --upgrade pip && pip install --no-cache-dir -r /app/requirements.lock.txt
 
-FROM python:3.11-slim AS runtime
+FROM python:3.9-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1

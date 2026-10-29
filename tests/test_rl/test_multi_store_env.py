@@ -5,9 +5,10 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
+import yaml
 
 pytest.importorskip("stable_baselines3")
-from stable_baselines3.common.vec_env import DummyVecEnv
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
 from src.rl.agent import RLInventoryAgent
 from src.rl.multi_store_env import build_vectorized_multi_store_env
@@ -38,14 +39,25 @@ def test_build_multi_store_vec_env() -> None:
     assert step.observations.shape[0] == 2
 
 
-def test_rl_agent_build_uses_all_vectorized_envs() -> None:
-    """Agent should create an SB3 vector env spanning all stores."""
+@pytest.mark.parametrize("normalize_reward", [True, False])
+def test_rl_agent_build_uses_all_vectorized_envs(tmp_path, normalize_reward: bool) -> None:
+    """Agent spans all stores; reward normalization wraps the vec env without touching obs."""
+    cfg = yaml.safe_load(open("configs/rl_config.yaml", encoding="utf-8"))
+    cfg["agent"]["normalize_reward"] = normalize_reward
+    config_path = tmp_path / "rl_config.yaml"
+    config_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
     env = build_vectorized_multi_store_env(_train_df(), store_ids=[1, 2])
-    agent = RLInventoryAgent(config_path="configs/rl_config.yaml", env=env)
+    agent = RLInventoryAgent(config_path=str(config_path), env=env)
     agent.build()
 
-    assert isinstance(agent.model.get_env(), DummyVecEnv)
-    assert int(agent.model.get_env().num_envs) == 2
+    vec_env = agent.model.get_env()
+    assert int(vec_env.num_envs) == 2
+    if normalize_reward:
+        assert isinstance(vec_env, VecNormalize)
+        assert vec_env.norm_reward and not vec_env.norm_obs
+        assert isinstance(vec_env.venv, DummyVecEnv)
+    else:
+        assert isinstance(vec_env, DummyVecEnv)
 
 
 def test_build_multi_store_vec_env_accepts_lowercase_sales() -> None:
