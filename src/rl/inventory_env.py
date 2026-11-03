@@ -113,6 +113,8 @@ class RetailInventoryEnv(gym.Env):
         # demand_series and forecasts stay in their source units (e.g. sales EUR); the env
         # divides them by demand_scale so stock, orders and costs are in inventory units.
         self.demand_scale = float(self.cfg.get("demand_scale", 1.0))
+        # Relative error added to the default (actual-demand) forecast; 0 = perfect forecast.
+        self.forecast_noise_std = float(self.cfg.get("forecast_noise_std", 0.0))
 
         self.demand_series = (
             np.asarray(demand_series, dtype=float)
@@ -452,7 +454,11 @@ class RetailInventoryEnv(gym.Env):
             padding = np.repeat(forecast[-1], self.horizon - forecast.shape[0])
             return np.concatenate([forecast, padding])
         idxs = [(self.t + offset) % len(self.demand_series) for offset in range(self.horizon)]
-        return self.demand_series[idxs] / self.demand_scale
+        forecast = self.demand_series[idxs] / self.demand_scale
+        if self.forecast_noise_std > 0:
+            noise = self.np_random.normal(0.0, self.forecast_noise_std, self.horizon)
+            forecast = np.clip(forecast * (1.0 + noise), 0.0, None)
+        return forecast
 
     def service_level(self) -> float:
         """Compute episode service level as non-stockout ratio.

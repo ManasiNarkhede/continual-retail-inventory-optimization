@@ -22,6 +22,9 @@ environment:
   # Without it the cost optimum sits near 90% service; a base-stock sweep on the training
   # stores puts the optimum at ~97.7% for 500. Not included in the reported total_cost.
   stockout_day_cost: 500.0
+  # Relative error on the 7-day forecast when no TFT forecast is wired in (0 = actual demand).
+  # Training on noisy forecasts keeps the policy robust to real forecast error.
+  forecast_noise_std: 0.15
   risk_aversion: 0.5
   service_level_target: 0.95
   order_cost: 10.0

@@ -304,9 +304,19 @@ def test_point_forecast_fn_truncates_pads_or_zeros(
 
 
 def test_default_forecast_wraps_demand_series(tmp_path: Path) -> None:
-    """Without a forecast callback the demand series is read cyclically."""
+    """Without a forecast callback the demand series is read cyclically.
+
+    forecast_noise_std perturbs it reproducibly (seeded), never below zero.
+    """
     env = _env(tmp_path, demand=np.arange(1.0, 5.0))
     np.testing.assert_allclose(env._get_forecast(), [1, 2, 3, 4, 1, 2, 3])
+
+    noisy = _env(tmp_path, demand=np.arange(1.0, 5.0), cfg={"forecast_noise_std": 0.5})
+    noisy.reset(seed=7)
+    first = noisy._get_forecast()
+    noisy.reset(seed=7)
+    np.testing.assert_allclose(noisy._get_forecast(), first)
+    assert np.all(first >= 0.0) and not np.allclose(first, [1, 2, 3, 4, 1, 2, 3])
 
 
 # -----------------------------------------------------------------------

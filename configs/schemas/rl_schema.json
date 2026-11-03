@@ -11,6 +11,7 @@
         "episode_length": { "type": "integer", "minimum": 1 },
         "demand_scale": { "type": "number", "exclusiveMinimum": 0 },
         "stockout_day_cost": { "type": "number", "minimum": 0 },
+        "forecast_noise_std": { "type": "number", "minimum": 0 },
         "reward_class": {
           "type": "string",
           "enum": ["TripleTierReward", "MultiObjectiveReward", "BaseReward", "ShapedReward"]
