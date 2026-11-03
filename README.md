@@ -40,16 +40,22 @@ Rossmann CSVs ─▶ data pipeline ─▶ TFT forecaster ─▶ RL ordering agen
 | RMSE | **862** | 1,304 |
 | p10–p90 interval coverage | 80.4 % | – |
 
-**Inventory control** (simulation: 34 stores not used in training, one year each, closed days
-included, 15 % random error on the agent's 7-day forecast)
+**Inventory control** (simulation, one year per store, closed days included, 15 % random error on
+the agent's 7-day forecast; the agent was trained on 16 stores)
 
-| Policy | Service level | Fill rate | Avg cost / store-year |
-|--------|---------------|-----------|-----------------------|
-| Base-stock rule (95 % safety stock) | 96.9 % | 98.1 % | €22,645 |
-| **PPO agent** | **99.8 %** | **100.0 %** | **€14,641** |
+| Stores evaluated | Policy | Avg service level | Stores ≥ 95 % | Fill rate | Avg cost / store-year |
+|------------------|--------|-------------------|---------------|-----------|-----------------------|
+| All 1,115 Rossmann stores | Base-stock rule (95 % safety stock) | 96.5 % | 82.2 % | 98.1 % | €22,106 |
+| | **PPO agent** | **99.7 %** | **99.2 %** | **99.9 %** | **€14,759** |
+| 34 stores not used in training | Base-stock rule (95 % safety stock) | 96.9 % | 88.2 % | 98.1 % | €22,645 |
+| | **PPO agent** | **99.8 %** | **100 %** | **100.0 %** | **€14,543** |
 
 - Service level is the share of days without a stockout; fill rate is the share of demand served.
-- Across the 34 stores the worst store reached 97.8 %; on average a store had 0.6 stockout days per year.
+- Median service level across all stores is 100 %; on the 34 unseen stores a store averages 0.6
+  stockout days per year.
+- The 9 stores below 95 % are the largest ones (≈ 180–200 units of demand per open day), at the
+  simulator's 200-unit daily order limit, so no policy can serve them fully (base-stock also drops
+  to ≈ 71 % there).
 - The agent stays above 98 % service level with forecast errors up to 30 %.
 - These figures come from a simulator driven by historical sales (1 unit = €100 of sales), not
   from live store operations. The dashboard's KPI is a 90-day simulation for one store and varies
