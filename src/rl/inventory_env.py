@@ -157,6 +157,7 @@ class RetailInventoryEnv(gym.Env):
                     holding_cost=self.holding_cost,
                     stockout_cost=self.stockout_cost,
                     order_cost=self.order_cost,
+                    stockout_day_cost=float(self.cfg.get("stockout_day_cost", 0.0)),
                 )
             else:
                 self._default_reward = reward_class(
@@ -337,8 +338,8 @@ class RetailInventoryEnv(gym.Env):
 
         Layout:
             [0]               stock / max_stock
-            [1..horizon]      forecast / max_demand
-            [horizon+1]       uncertainty_width / max_demand
+            [1..horizon]      forecast / max_stock
+            [horizon+1]       uncertainty_width / max_stock
             [horizon+2]       store_open (1.0 or 0.0)
             [horizon+3]       lead_time / 7
             [horizon+4]       in-transit orders / max_stock
@@ -351,15 +352,15 @@ class RetailInventoryEnv(gym.Env):
             Observation array clipped to [-1, 1].
         """
         forecast, uncertainty_width = self._get_forecast_with_uncertainty()
-        max_demand = max(float(np.max(self.demand_series)) / self.demand_scale, 1.0)
         day_of_week = self.t % 7
         store_open = self._get_store_open(self.t)
 
         obs = np.array(
             [
                 self.stock / self.max_stock,
-                *list(forecast / max_demand),
-                uncertainty_width / max_demand,
+                # Same scale as stock, so the policy can compare them for any store size.
+                *list(forecast / self.max_stock),
+                uncertainty_width / self.max_stock,
                 store_open,
                 self.current_lead_time / 7.0,
                 # Stock + in-transit (inventory position) is what an order-up-to decision needs.

@@ -4,7 +4,7 @@ Trains one PPO/SAC agent across several stores at once and saves it to
 ``checkpoints/rl/inventory_agent.zip``.
 
 Usage:
-    python scripts/train_rl.py --config configs/rl_config.yaml [--n-stores 8]
+    python scripts/train_rl.py --config configs/rl_config.yaml [--n-stores 16]
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ def select_training_stores(train_df: pd.DataFrame, sales_col: str, n_stores: int
     return [int(s) for s in means.index[picks]]
 
 
-def main(config_path: str, total_timesteps: int | None = None, n_stores: int = 8) -> None:
+def main(config_path: str, total_timesteps: int | None = None, n_stores: int = 16) -> None:
     """Run RL inventory agent training pipeline.
 
     Args:
@@ -93,6 +93,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/rl_config.yaml")
     parser.add_argument("--total-timesteps", type=int, default=None)
-    parser.add_argument("--n-stores", type=int, default=8)
+    parser.add_argument("--n-stores", type=int, default=16)
     args = parser.parse_args()
     main(config_path=args.config, total_timesteps=args.total_timesteps, n_stores=args.n_stores)

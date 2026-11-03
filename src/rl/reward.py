@@ -26,6 +26,8 @@ class BaseReward:
         holding_cost: Cost per excess unit.
         stockout_cost: Cost per unmet unit.
         order_cost: Fixed cost per order.
+        stockout_day_cost: Fixed penalty for any day with a shortfall; prices the
+            service-level target (share of stockout-free days) during training.
     """
 
     def __init__(
@@ -33,10 +35,12 @@ class BaseReward:
         holding_cost: float = 0.5,
         stockout_cost: float = 5.0,
         order_cost: float = 10.0,
+        stockout_day_cost: float = 0.0,
     ) -> None:
         self.holding_cost = float(holding_cost)
         self.stockout_cost = float(stockout_cost)
         self.order_cost = float(order_cost)
+        self.stockout_day_cost = float(stockout_day_cost)
 
     def __call__(self, excess_units: float, shortfall_units: float, order_placed: bool) -> float:
         """Compute reward from one-step cost terms."""
@@ -45,6 +49,8 @@ class BaseReward:
         )
         if order_placed:
             total_cost += self.order_cost
+        if shortfall_units > 0:
+            total_cost += self.stockout_day_cost
         return -float(total_cost)
 
 
@@ -214,9 +220,13 @@ class ShapedReward(BaseReward):
         gamma: float = 0.99,
         target_stock: float = 100.0,
         shaping_alpha: float = 0.1,
+        stockout_day_cost: float = 0.0,
     ) -> None:
         super().__init__(
-            holding_cost=holding_cost, stockout_cost=stockout_cost, order_cost=order_cost
+            holding_cost=holding_cost,
+            stockout_cost=stockout_cost,
+            order_cost=order_cost,
+            stockout_day_cost=stockout_day_cost,
         )
         self.gamma = float(gamma)
         self.target_stock = float(target_stock)

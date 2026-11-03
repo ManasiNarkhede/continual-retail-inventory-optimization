@@ -264,8 +264,9 @@ def test_quantile_forecast_padding_and_uncertainty(tmp_path: Path) -> None:
     forecast, width = env._get_forecast_with_uncertainty()
     np.testing.assert_allclose(forecast, [30, 40, 50, 50, 50, 50, 50])
     assert width == pytest.approx((10 + 20 + 0 + 0 + 10 + 20 + 10) / 7)
-    np.testing.assert_allclose(obs[1 : HORIZON + 1], np.array(forecast) / 100.0, rtol=1e-6)
-    assert obs[HORIZON + 1] == pytest.approx(width / 100.0, rel=1e-6)
+    # forecast and width share the stock scale (max_stock), independent of the store's demand
+    np.testing.assert_allclose(obs[1 : HORIZON + 1], np.array(forecast) / 500.0, rtol=1e-6)
+    assert obs[HORIZON + 1] == pytest.approx(width / 500.0, rel=1e-6)
     assert seen_t[0] == 0
 
 

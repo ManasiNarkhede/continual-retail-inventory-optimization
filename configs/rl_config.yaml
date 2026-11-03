@@ -18,6 +18,10 @@ environment:
   # TripleTierReward at severity 0.05 charges ~0.25/unit for small shortfalls (vs 5 in the KPI)
   # and trained agents that stock out on most days.
   reward_class: "BaseReward"
+  # Training-only penalty per day with any shortfall (service level = stockout-free days).
+  # Without it the cost optimum sits near 90% service; a base-stock sweep on the training
+  # stores puts the optimum at ~97.7% for 500. Not included in the reported total_cost.
+  stockout_day_cost: 500.0
   risk_aversion: 0.5
   service_level_target: 0.95
   order_cost: 10.0
@@ -32,7 +36,7 @@ agent:
   enable_curriculum: false
   curriculum_levels: 3
   learning_rate: 0.0003
-  n_steps: 256  # per store env; 8 training stores -> 2048 samples per PPO update
+  n_steps: 128  # per store env; 16 training stores -> 2048 samples per PPO update
   batch_size: 64
   n_epochs: 10
   gamma: 0.99

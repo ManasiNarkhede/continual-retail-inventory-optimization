@@ -38,7 +38,7 @@ def test_reward_without_order_cost() -> None:
 
 
 def test_base_reward_class_matches_function() -> None:
-    """Ensure BaseReward produces same value as functional helper."""
+    """BaseReward is linear cost; stockout_day_cost adds a flat penalty on shortfall days only."""
     reward_obj = BaseReward(holding_cost=0.5, stockout_cost=5.0, order_cost=10.0)
     via_class = reward_obj(excess_units=4.0, shortfall_units=1.0, order_placed=True)
     via_function = compute_inventory_reward(
@@ -49,8 +49,14 @@ def test_base_reward_class_matches_function() -> None:
         stockout_cost=5.0,
         order_cost=10.0,
     )
-    assert via_class < 0.0
+    assert via_class == -17.0
     assert via_function < 0.0
+
+    penalized = BaseReward(stockout_day_cost=100.0)
+    assert penalized(excess_units=4.0, shortfall_units=1.0, order_placed=True) == -117.0
+    assert penalized(excess_units=4.0, shortfall_units=0.0, order_placed=True) == -12.0
+    shaped = ShapedReward(stockout_day_cost=100.0)
+    assert shaped(excess_units=0.0, shortfall_units=2.0, order_placed=False) == -110.0
 
 
 def test_triple_tier_reward_exponential_penalty() -> None:
