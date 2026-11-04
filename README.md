@@ -32,13 +32,19 @@ Rossmann CSVs ─▶ data pipeline ─▶ TFT forecaster ─▶ RL ordering agen
 
 ## Results
 
-**Forecasting** (validation, 1,115 stores, from `data/processed/metrics_latest.json`)
+**Forecasting** (TFT trained on a 50-store sample; scored on each store's final 28 open days,
+which are held out of training: 1,400 store-days, July 2015)
 
-| Metric | TFT | Baseline |
-|--------|-----|----------|
-| sMAPE | **7.78 %** | 20.48 % |
-| RMSE | **862** | 1,304 |
-| p10–p90 interval coverage | 80.4 % | – |
+| Forecast | sMAPE | RMSE (€/day) |
+|----------|-------|--------------|
+| **TFT (p50)** | **8.5 %** | **862** |
+| Seasonal naive: same weekday, 4-week mean | 16.9 % | 1,654 |
+| Seasonal naive: same weekday, last week | 23.5 % | 2,394 |
+
+- The TFT halves the error of the stronger baseline (−49 % sMAPE).
+- Its p10–p90 band contains the actual value on 73.6 % of days (nominal 80 %), so the uncertainty
+  bands are slightly narrow.
+- Reproduce with `python scripts/evaluate_tft.py` (writes `data/processed/metrics_latest.json`).
 
 **Inventory control** (simulation, one year per store, closed days included, 15 % random error on
 the agent's 7-day forecast; the agent was trained on 16 stores)
@@ -58,14 +64,8 @@ the agent's 7-day forecast; the agent was trained on 16 stores)
   to ≈ 71 % there).
 - The agent stays above 98 % service level with forecast errors up to 30 %.
 - These figures come from a simulator driven by historical sales (1 unit = €100 of sales), not
-  from live store operations. The dashboard's KPI is a 90-day simulation for one store and varies
-  between runs (typically 99–100 %).
-
-**Continual learning** (Replay strategy, from `data/processed/cl_metrics_latest.json`)
-
-| Backward transfer | Forward transfer | Stability | Plasticity |
-|-------------------|------------------|-----------|------------|
-| −0.0185 | 0.0241 | 0.912 | 0.867 |
+  from live store operations. The dashboard's KPI is a 90-day simulation for one store over 32
+  demand scenarios drawn from the TFT's forecast bands (≈ 98.8 % service level).
 
 ---
 
@@ -105,7 +105,10 @@ Trained models are included (`checkpoints/tft/`, `checkpoints/rl/`), so no train
 ## Training
 
 ```bash
-python scripts/train_tft.py --config configs/tft_config.yaml      # forecaster
+python scripts/train_tft.py --config configs/tft_config.yaml \
+  --override-hidden-size 64 --override-hidden-cont-size 32 \
+  --override-batch-size 64 --override-max-epochs 3                # forecaster (~1.5 h on CPU)
+python scripts/evaluate_tft.py                                    # held-out forecast metrics
 python scripts/train_cl.py  --cl-config configs/cl_config.yaml    # continual learning
 python scripts/train_rl.py  --config configs/rl_config.yaml       # ordering agent (16 stores, ~50 min on CPU)
 ```

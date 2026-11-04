@@ -52,6 +52,7 @@ def build_tft_dataset(
     config_path: str = "configs/tft_config.yaml",
     training: bool = True,
     training_dataset: TimeSeriesDataSet | None = None,
+    predict: bool = False,
 ) -> TimeSeriesDataSet:
     """Build a TimeSeriesDataSet for TFT training or validation.
 
@@ -60,6 +61,8 @@ def build_tft_dataset(
         config_path: Path to the TFT YAML config.
         training: Whether to create a training dataset.
         training_dataset: Required for validation dataset creation.
+        predict: Validation only; one sample per store forecasting its last
+            ``max_prediction_length`` rows (the held-out window).
 
     Returns:
         Configured TimeSeriesDataSet instance.
@@ -97,15 +100,18 @@ def build_tft_dataset(
         return TimeSeriesDataSet.from_dataset(
             training_dataset,
             data,
-            predict=False,
+            predict=predict,
             stop_randomization=True,
         )
 
-    max_time_idx = int(data["time_idx"].max())
-    training_cutoff = max_time_idx - int(cfg["max_prediction_length"])
+    # time_idx counts each store's own rows, so hold out the last max_prediction_length rows
+    # per store (a single global cutoff left shorter stores with no held-out data).
+    store_cutoff = data.groupby("Store")["time_idx"].transform("max") - int(
+        cfg["max_prediction_length"]
+    )
 
     dataset = TimeSeriesDataSet(
-        data[data["time_idx"] <= training_cutoff],
+        data[data["time_idx"] <= store_cutoff],
         time_idx="time_idx",
         target=cfg["target"],
         group_ids=["Store"],

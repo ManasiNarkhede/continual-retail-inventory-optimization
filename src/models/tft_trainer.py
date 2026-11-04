@@ -57,14 +57,17 @@ class TFTTrainer:
             Fitted pl.Trainer instance.
         """
         cfg = self.config
+        # Each worker is a separate process (a full Python + torch copy on Windows);
+        # the default 0 loads batches in-process, which suits this data size.
+        num_workers = int(cfg.get("num_workers", 0))
 
         train_loader = train_dataset.to_dataloader(
-            train=True, batch_size=cfg["batch_size"], num_workers=4
+            train=True, batch_size=cfg["batch_size"], num_workers=num_workers
         )
         val_loader = val_dataset.to_dataloader(
             train=False,
             batch_size=cfg["batch_size"] * 2,
-            num_workers=4,
+            num_workers=num_workers,
         )
 
         tb_logger = TensorBoardLogger(

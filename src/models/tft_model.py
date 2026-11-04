@@ -248,12 +248,14 @@ class TFTForecaster:
         if self.model is None:
             raise RuntimeError("Call build() or load() before predict().")
         result = self.model.predict(dataloader, mode=mode, return_index=True)
-        if isinstance(result, tuple):
-            predictions = result[0]
-            index = result[1] if len(result) > 1 else None
-        elif hasattr(result, "output") and hasattr(result, "index"):
+        # pytorch-forecasting's Prediction is a namedtuple (output, x, index, ...), so
+        # check its fields before treating the result as a plain (predictions, index) tuple.
+        if hasattr(result, "output") and hasattr(result, "index"):
             predictions = result.output
             index = result.index
+        elif isinstance(result, tuple):
+            predictions = result[0]
+            index = result[1] if len(result) > 1 else None
         else:
             predictions = result
             index = None

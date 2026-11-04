@@ -61,14 +61,15 @@ def sample_df() -> pd.DataFrame:
 
 
 def test_build_training_dataset(sample_df: pd.DataFrame, config_path: str) -> None:
-    """Ensure training dataset can be built.
+    """Training data holds out the last max_prediction_length rows of every store.
 
-    Args:
-        sample_df: Input dataframe fixture.
-        config_path: Temporary TFT config path.
+    Regression: a global cutoff on time_idx left shorter stores with nothing held out.
     """
-    dataset = build_tft_dataset(sample_df, config_path=config_path)
-    assert dataset is not None
+    shorter = sample_df.iloc[:22].assign(Store=2, store=2)
+    both = pd.concat([sample_df, shorter], ignore_index=True)
+    dataset = build_tft_dataset(both, config_path=config_path)
+    last_seen = dataset.decoded_index.groupby("Store")["time_idx_last"].max()
+    assert last_seen.to_dict() == {1: 30 - 1 - 7, 2: 22 - 1 - 7}
 
 
 def test_validation_requires_training_dataset(sample_df: pd.DataFrame, config_path: str) -> None:

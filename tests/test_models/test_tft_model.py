@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections import namedtuple
 from pathlib import Path
 
 import numpy as np
@@ -170,10 +171,8 @@ class _TupleModel:
         return self.result
 
 
-class _Prediction:
-    def __init__(self, output, index) -> None:  # noqa: ANN001
-        self.output = output
-        self.index = index
+# Mirrors pytorch-forecasting's Prediction, a namedtuple whose second field is x, not index.
+_Prediction = namedtuple("_Prediction", ["output", "x", "index"])
 
 
 @pytest.mark.parametrize(
@@ -181,7 +180,7 @@ class _Prediction:
     [
         (("P", "I"), "P", "I"),
         (("P",), "P", None),
-        (_Prediction("P", "I"), "P", "I"),
+        (_Prediction("P", None, "I"), "P", "I"),
         ("P", "P", None),
     ],
 )

@@ -1,12 +1,15 @@
 {
-  "model_version": "tft_all_stores.pt",
-  "timestamp_utc": "2026-05-20T15:30:00.000000+00:00",
-  "val_smape": 7.78,
-  "val_rmse": 862.26,
-  "val_coverage_80pct": 0.8036,
-  "stores_trained": 1115,
-  "baseline_smape": 20.4814,
-  "baseline_rmse": 1303.8615,
-  "training_batches": 13,
-  "status": "production_ready"
+  "model_version": "tft_latest.pt",
+  "timestamp_utc": "2026-11-04T08:16:09.362952+00:00",
+  "evaluation": "held-out final 28 open days per store, unseen in training",
+  "stores_trained": 50,
+  "holdout_days_scored": 1400,
+  "val_smape": 8.54,
+  "val_rmse": 862.27,
+  "val_coverage_80pct": 0.7364,
+  "baseline_smape": 23.54,
+  "baseline_rmse": 2393.92,
+  "baseline": "same weekday, last week before the window",
+  "baseline_4wk_smape": 16.91,
+  "baseline_4wk_rmse": 1653.94
 }
